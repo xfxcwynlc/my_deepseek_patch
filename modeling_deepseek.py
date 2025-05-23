@@ -142,7 +142,7 @@ def replace_any_expert_with_random(topk_idx, topk_weight, scores, total_experts=
     return topk_idx_new,topk_weight_new
     
 
-def replace_any_expert_with_random(topk_idx, topk_weight, scores, total_experts=64, random_num=1):
+def failed_any_expert_with_random(topk_idx, topk_weight, scores, total_experts=64, random_num=1):
     '''
     Randomly drop one expert from topk, returning tensors of shape [N, 6]
     '''
