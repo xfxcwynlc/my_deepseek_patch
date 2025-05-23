@@ -142,6 +142,29 @@ def replace_any_expert_with_random(topk_idx, topk_weight, scores, total_experts=
     return topk_idx_new,topk_weight_new
     
 
+def replace_any_expert_with_random(topk_idx, topk_weight, scores, total_experts=64, random_num=1):
+    '''
+    Randomly drop one expert from topk, returning tensors of shape [N, 6]
+    '''
+    assert topk_idx.shape[1] == 7, f"Expected 7 experts in the topk list so far but got {topk_idx.shape[1]}!!"
+
+    N, K = topk_idx.shape  # K = 7
+    topk_idx_new = torch.empty((N, K - 1), dtype=torch.int64, device=topk_idx.device)
+    topk_weight_new = torch.empty((N, K - 1), dtype=topk_weight.dtype, device=topk_weight.device)
+
+    for i in range(N):
+        drop_idx = torch.randint(0, K, ()).item()  # scalar between 0 and 6
+
+        # Copy everything except the dropped expert
+        topk_idx_new[i, :drop_idx] = topk_idx[i, :drop_idx]
+        topk_idx_new[i, drop_idx:] = topk_idx[i, drop_idx + 1:]
+
+        topk_weight_new[i, :drop_idx] = topk_weight[i, :drop_idx]
+        topk_weight_new[i, drop_idx:] = topk_weight[i, drop_idx + 1:]
+
+    return topk_idx_new, topk_weight_new
+
+
 class DeepseekV2RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -485,8 +508,9 @@ class MoEGate(nn.Module):
         ### select top-k experts
         if self.topk_method == "greedy":
             topk_weight, topk_idx = torch.topk(
-                scores, k=self.top_k, dim=-1, sorted=False
+                scores, k=7, dim=-1, sorted=False
             )
+
         elif self.topk_method == "group_limited_greedy":
             group_scores = (
                 scores.view(bsz * seq_len, self.n_group, -1).max(dim=-1).values
