@@ -114,7 +114,6 @@ def replace_last_expert_with_random(topk_idx, topk_weight, scores, total_experts
     topk_idx_new.to(topk_idx.device)
     return topk_idx_new,topk_weight_new
 
-
 def replace_any_expert_with_random(topk_idx, topk_weight, scores, total_experts=64, random_num=1):
     '''
     Randomly replace ANY expert with a random expert 
@@ -140,9 +139,8 @@ def replace_any_expert_with_random(topk_idx, topk_weight, scores, total_experts=
         topk_weight_new[i, expert_to_be_replaced] = scores[i, random_expert].tolist()
     topk_idx_new.to(topk_idx.device)
     return topk_idx_new,topk_weight_new
-    
 
-def failed_any_expert_with_random(topk_idx, topk_weight, scores, total_experts=64, random_num=1):
+def failed_any_expert_with_random(topk_idx, topk_weight):
     '''
     Randomly drop one expert from topk, returning tensors of shape [N, 6]
     '''
@@ -155,15 +153,17 @@ def failed_any_expert_with_random(topk_idx, topk_weight, scores, total_experts=6
     for i in range(N):
         drop_idx = torch.randint(0, K, ()).item()  # scalar between 0 and 6
 
-        # Copy everything except the dropped expert
-        topk_idx_new[i, :drop_idx] = topk_idx[i, :drop_idx]
-        topk_idx_new[i, drop_idx:] = topk_idx[i, drop_idx + 1:]
+        # Copy before the drop index
+        if drop_idx > 0:
+            topk_idx_new[i, :drop_idx] = topk_idx[i, :drop_idx]
+            topk_weight_new[i, :drop_idx] = topk_weight[i, :drop_idx]
 
-        topk_weight_new[i, :drop_idx] = topk_weight[i, :drop_idx]
-        topk_weight_new[i, drop_idx:] = topk_weight[i, drop_idx + 1:]
+        # Copy after the drop index (if there is anything to copy)
+        if drop_idx < K - 1:
+            topk_idx_new[i, drop_idx:] = topk_idx[i, drop_idx + 1:]
+            topk_weight_new[i, drop_idx:] = topk_weight[i, drop_idx + 1:]
 
     return topk_idx_new, topk_weight_new
-
 
 class DeepseekV2RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -508,9 +508,8 @@ class MoEGate(nn.Module):
         ### select top-k experts
         if self.topk_method == "greedy":
             topk_weight, topk_idx = torch.topk(
-                scores, k=7, dim=-1, sorted=False
+                scores, k=self.top_k+1, dim=-1, sorted=False
             )
-
         elif self.topk_method == "group_limited_greedy":
             group_scores = (
                 scores.view(bsz * seq_len, self.n_group, -1).max(dim=-1).values
@@ -570,7 +569,7 @@ class MoEGate(nn.Module):
         else:
             aux_loss = None
 
-        topk_idx,topk_weight = replace_last_expert_with_random(topk_idx, topk_weight, scores)
+        topk_idx,topk_weight = failed_any_expert_with_random(topk_idx, topk_weight)
           
         return topk_idx, topk_weight, aux_loss
 
