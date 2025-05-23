@@ -165,6 +165,39 @@ def failed_any_expert_with_random(topk_idx, topk_weight):
 
     return topk_idx_new, topk_weight_new
 
+
+def failed_one_expert(topk_idx, topk_weight, expert_idx=0):
+    '''
+    Randomly drop one expert from topk, returning tensors of shape [N, 6]
+    '''
+    N, K = topk_idx.shape
+    assert K == 7, f"Expected 7 experts per row, got {K}"
+
+    topk_idx_new = torch.empty((N, 6), dtype=topk_idx.dtype, device=topk_idx.device)
+    topk_weight_new = torch.empty((N, 6), dtype=topk_weight.dtype, device=topk_weight.device)
+
+    for i in range(N):
+        row = topk_idx[i,:]
+        weights = topk_weight[i,:]
+
+        # Try to find the expert to remove
+        match = (row == expert_idx).nonzero(as_tuple=False)
+
+        if match.numel() > 0:
+            drop_idx = match[0].item()
+            if drop_idx > 0:
+                topk_idx_new[i, :drop_idx] = row[:drop_idx]
+                topk_weight_new[i, :drop_idx] = weights[:drop_idx]
+            if drop_idx < K - 1:
+                topk_idx_new[i, drop_idx:] = row[drop_idx + 1:]
+                topk_weight_new[i, drop_idx:] = weights[drop_idx + 1:]
+        else:
+            # expert_idx not present — take top 6
+            topk_idx_new[i,:] = row[i,:6]
+            topk_weight_new[i,:] = weights[i,:6]
+
+    return topk_idx_new, topk_weight_new
+
 class DeepseekV2RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
