@@ -193,8 +193,8 @@ def failed_one_expert(topk_idx, topk_weight, expert_idx=0):
                 topk_weight_new[i, drop_idx:] = weights[drop_idx + 1:]
         else:
             # expert_idx not present — take top 6
-            topk_idx_new[i,:] = row[i,:6]
-            topk_weight_new[i,:] = weights[i,:6]
+            topk_idx_new[i,:] = row[:6]
+            topk_weight_new[i,:] = weights[:6]
 
     return topk_idx_new, topk_weight_new
 
