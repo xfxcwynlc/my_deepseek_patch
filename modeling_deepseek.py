@@ -113,6 +113,33 @@ def replace_last_expert_with_random(topk_idx, topk_weight, scores, total_experts
         topk_weight_new[i,-1] = scores[i, random_expert].tolist()
     topk_idx_new.to(topk_idx.device)
     return topk_idx_new,topk_weight_new
+
+
+def replace_any_expert_with_random(topk_idx, topk_weight, scores, total_experts=64, random_num=1):
+    '''
+    Randomly replace ANY expert with a random expert 
+        - topk_idx: original top k results, by default replacing the ANY expert with a random expert
+        - topk_weight: replacing the ANY expert weight with a random expert weight
+        - scores, the original scores for all matrices
+    '''
+    topk_idx_new = topk_idx.clone()
+    topk_weight_new = topk_weight.clone()
+    #topk_idx shape topk_idx, [N, experts_cfg]
+    for i in range(topk_idx_new.shape[0]):
+        # Get the last expert index
+        setA = set(topk_idx_new[i].tolist())
+        setB = set(range(total_experts))
+        remaining_experts = list(setB - setA) 
+
+        random_expert_idxs = torch.randint(0, len(remaining_experts), (random_num,))
+        random_expert = remaining_experts[random_expert_idxs]
+        #print(f"Replace: {topk_idx_new[i, -1]} with random expert{random_expert}")
+
+        expert_to_be_replaced = torch.randint(0, 6, (random_num,))
+        topk_idx_new[i, expert_to_be_replaced] = random_expert
+        topk_weight_new[i, expert_to_be_replaced] = scores[i, random_expert].tolist()
+    topk_idx_new.to(topk_idx.device)
+    return topk_idx_new,topk_weight_new
     
 
 class DeepseekV2RMSNorm(nn.Module):
