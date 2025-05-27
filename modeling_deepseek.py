@@ -165,6 +165,31 @@ def failed_any_expert_with_random(topk_idx, topk_weight):
 
     return topk_idx_new, topk_weight_new
 
+def failed_any_expert_with_random6(topk_idx, topk_weight):
+    '''
+    Randomly drop one expert from topk, returning tensors of shape [N, 5]
+    '''
+    assert topk_idx.shape[1] == 6, f"Expected 6 experts in the topk list so far but got {topk_idx.shape[1]}!!"
+
+    N, K = topk_idx.shape  # K = 6
+    topk_idx_new = torch.empty((N, K - 1), dtype=torch.int64, device=topk_idx.device) #5
+    topk_weight_new = torch.empty((N, K - 1), dtype=topk_weight.dtype, device=topk_weight.device)
+
+    for i in range(N):
+        drop_idx = torch.randint(0, K, ()).item()  # scalar between 0 and 6
+
+        # Copy before the drop index
+        if drop_idx > 0:
+            topk_idx_new[i, :drop_idx] = topk_idx[i, :drop_idx]
+            topk_weight_new[i, :drop_idx] = topk_weight[i, :drop_idx]
+
+        # Copy after the drop index (if there is anything to copy)
+        if drop_idx < K - 1:
+            topk_idx_new[i, drop_idx:] = topk_idx[i, drop_idx + 1:]
+            topk_weight_new[i, drop_idx:] = topk_weight[i, drop_idx + 1:]
+
+    return topk_idx_new, topk_weight_new
+
 
 def failed_one_expert(topk_idx, topk_weight, expert_idx=0):
     '''
