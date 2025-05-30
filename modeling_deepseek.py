@@ -90,138 +90,6 @@ def _get_unpad_data(attention_mask):
         max_seqlen_in_batch,
     )
 
-def replace_last_expert_with_random(topk_idx, topk_weight, scores, total_experts=64, random_num=1):
-    '''
-    Randomly replace the last expert with a random expert 
-        - topk_idx: original top k results, by default replacing the last (lowest expert) with a random expert
-        - topk_weight: replacing the last expert weight with a random expert weight
-        - scores, the original scores for all matrices
-    '''
-    topk_idx_new = topk_idx.clone()
-    topk_weight_new = topk_weight.clone()
-    #topk_idx shape topk_idx, [N, experts_cfg]
-    for i in range(topk_idx_new.shape[0]):
-        # Get the last expert index
-        setA = set(topk_idx_new[i].tolist())
-        setB = set(range(total_experts))
-        remaining_experts = list(setB - setA) 
-
-        random_expert_idxs = torch.randint(0, len(remaining_experts), (random_num,))
-        random_expert = remaining_experts[random_expert_idxs]
-        #print(f"Replace: {topk_idx_new[i, -1]} with random expert{random_expert}")
-        topk_idx_new[i, -1] = random_expert
-        topk_weight_new[i,-1] = scores[i, random_expert].tolist()
-    topk_idx_new.to(topk_idx.device)
-    return topk_idx_new,topk_weight_new
-
-def replace_any_expert_with_random(topk_idx, topk_weight, scores, total_experts=64, random_num=1):
-    '''
-    Randomly replace ANY expert with a random expert 
-        - topk_idx: original top k results, by default replacing the ANY expert with a random expert
-        - topk_weight: replacing the ANY expert weight with a random expert weight
-        - scores, the original scores for all matrices
-    '''
-    topk_idx_new = topk_idx.clone()
-    topk_weight_new = topk_weight.clone()
-    #topk_idx shape topk_idx, [N, experts_cfg]
-    for i in range(topk_idx_new.shape[0]):
-        # Get the last expert index
-        setA = set(topk_idx_new[i].tolist())
-        setB = set(range(total_experts))
-        remaining_experts = list(setB - setA) 
-
-        random_expert_idxs = torch.randint(0, len(remaining_experts), (random_num,))
-        random_expert = remaining_experts[random_expert_idxs]
-        #print(f"Replace: {topk_idx_new[i, -1]} with random expert{random_expert}")
-
-        expert_to_be_replaced = torch.randint(0, 6, (random_num,))
-        topk_idx_new[i, expert_to_be_replaced] = random_expert
-        topk_weight_new[i, expert_to_be_replaced] = scores[i, random_expert].tolist()
-    topk_idx_new.to(topk_idx.device)
-    return topk_idx_new,topk_weight_new
-
-def failed_any_expert_with_random(topk_idx, topk_weight):
-    '''
-    Randomly drop one expert from topk, returning tensors of shape [N, 6]
-    '''
-    assert topk_idx.shape[1] == 7, f"Expected 7 experts in the topk list so far but got {topk_idx.shape[1]}!!"
-
-    N, K = topk_idx.shape  # K = 7
-    topk_idx_new = torch.empty((N, K - 1), dtype=torch.int64, device=topk_idx.device)
-    topk_weight_new = torch.empty((N, K - 1), dtype=topk_weight.dtype, device=topk_weight.device)
-
-    for i in range(N):
-        drop_idx = torch.randint(0, K, ()).item()  # scalar between 0 and 6
-
-        # Copy before the drop index
-        if drop_idx > 0:
-            topk_idx_new[i, :drop_idx] = topk_idx[i, :drop_idx]
-            topk_weight_new[i, :drop_idx] = topk_weight[i, :drop_idx]
-
-        # Copy after the drop index (if there is anything to copy)
-        if drop_idx < K - 1:
-            topk_idx_new[i, drop_idx:] = topk_idx[i, drop_idx + 1:]
-            topk_weight_new[i, drop_idx:] = topk_weight[i, drop_idx + 1:]
-
-    return topk_idx_new, topk_weight_new
-
-def failed_any_expert_with_random6(topk_idx, topk_weight):
-    '''
-    Randomly drop one expert from topk, returning tensors of shape [N, 5]
-    '''
-    assert topk_idx.shape[1] == 6, f"Expected 6 experts in the topk list so far but got {topk_idx.shape[1]}!!"
-
-    N, K = topk_idx.shape  # K = 6
-    topk_idx_new = torch.empty((N, K - 1), dtype=torch.int64, device=topk_idx.device) #5
-    topk_weight_new = torch.empty((N, K - 1), dtype=topk_weight.dtype, device=topk_weight.device)
-
-    for i in range(N):
-        drop_idx = torch.randint(0, K, ()).item()  # scalar between 0 and 6
-
-        # Copy before the drop index
-        if drop_idx > 0:
-            topk_idx_new[i, :drop_idx] = topk_idx[i, :drop_idx]
-            topk_weight_new[i, :drop_idx] = topk_weight[i, :drop_idx]
-
-        # Copy after the drop index (if there is anything to copy)
-        if drop_idx < K - 1:
-            topk_idx_new[i, drop_idx:] = topk_idx[i, drop_idx + 1:]
-            topk_weight_new[i, drop_idx:] = topk_weight[i, drop_idx + 1:]
-
-    return topk_idx_new, topk_weight_new
-
-
-def failed_one_expert(topk_idx, topk_weight, expert_idx=0):
-    '''
-    Randomly drop one expert from topk, returning tensors of shape [N, 6]
-    '''
-    N, K = topk_idx.shape
-    assert K == 7, f"Expected 7 experts per row, got {K}"
-
-    topk_idx_new = torch.empty((N, 6), dtype=topk_idx.dtype, device=topk_idx.device)
-    topk_weight_new = torch.empty((N, 6), dtype=topk_weight.dtype, device=topk_weight.device)
-
-    for i in range(N):
-        row = topk_idx[i,:]
-        weights = topk_weight[i,:]
-
-        # Try to find the expert to remove
-        match = (row == expert_idx).nonzero(as_tuple=False)
-
-        if match.numel() > 0:
-            drop_idx = match[0].item()
-            if drop_idx > 0:
-                topk_idx_new[i, :drop_idx] = row[:drop_idx]
-                topk_weight_new[i, :drop_idx] = weights[:drop_idx]
-            if drop_idx < K - 1:
-                topk_idx_new[i, drop_idx:] = row[drop_idx + 1:]
-                topk_weight_new[i, drop_idx:] = weights[drop_idx + 1:]
-        else:
-            # expert_idx not present — take top 6
-            topk_idx_new[i,:] = row[:6]
-            topk_weight_new[i,:] = weights[:6]
-
-    return topk_idx_new, topk_weight_new
 
 class DeepseekV2RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -391,6 +259,75 @@ def yarn_linear_ramp_mask(min, max, dim):
     return ramp_func
 
 
+def failed_any_expert_with_random6(topk_idx, topk_weight):
+    '''
+    Randomly drop one expert from topk, returning tensors of shape [N, 5]
+    '''
+    assert topk_idx.shape[1] == 6, f"Expected 6 experts in the topk list so far but got {topk_idx.shape[1]}!!"
+
+    N, K = topk_idx.shape  # K = 6
+    topk_idx_new = torch.empty((N, K - 1), dtype=torch.int64, device=topk_idx.device) #5
+    topk_weight_new = torch.empty((N, K - 1), dtype=topk_weight.dtype, device=topk_weight.device)
+
+    for i in range(N):
+        drop_idx = torch.randint(0, K, ()).item()  # scalar between 0 and 6
+
+        # Copy before the drop index
+        if drop_idx > 0:
+            topk_idx_new[i, :drop_idx] = topk_idx[i, :drop_idx]
+            topk_weight_new[i, :drop_idx] = topk_weight[i, :drop_idx]
+
+        # Copy after the drop index (if there is anything to copy)
+        if drop_idx < K - 1:
+            topk_idx_new[i, drop_idx:] = topk_idx[i, drop_idx + 1:]
+            topk_weight_new[i, drop_idx:] = topk_weight[i, drop_idx + 1:]
+
+    return topk_idx_new, topk_weight_new
+
+
+def failed_any_expert_vectorized(topk_idx, topk_weight, num_experts=6):
+    """
+        Randomly drop one expert from topk, returning tensors of shape [N, num_experts];
+        Assuming topk_idx.shape[1] > num_experts,
+    """
+    N, K = topk_idx.shape
+    assert K > num_experts, f"Expected more than {num_experts} experts in the topk list so far but got {K}!!"
+    num_to_drop = K - num_experts
+
+    # Generate random permutations of indices per row
+    perm = torch.stack([torch.randperm(K, device=topk_idx.device) for _ in range(N)])  # [N, K]
+
+    # Create drop mask: True means drop this index
+    drop_mask = torch.zeros((N, K), dtype=torch.bool, device=topk_idx.device)
+    drop_mask.scatter_(1, perm[:, :num_to_drop], True)
+
+    # Invert drop mask to keep the rest
+    keep_mask = ~drop_mask
+
+    topk_idx_new = torch.masked_select(topk_idx, keep_mask).view(N, num_experts)
+    topk_weight_new = torch.masked_select(topk_weight, keep_mask).view(N, num_experts)
+
+    return topk_idx_new,topk_weight_new
+
+def failed_any_expert_vectorized_fast(topk_idx, topk_weight, num_experts=6):
+    """
+    Vectorized: Randomly drop (K - num_experts) experts per row.
+    """
+    N, K = topk_idx.shape
+    assert K > num_experts, f"Expected more than {num_experts} experts in the topk list so far but got {K}!!"
+    num_to_keep = num_experts
+
+    # Generate random scores and sort them to simulate randperm per row
+    rand_scores = torch.rand((N, K), device=topk_idx.device)
+    keep_indices = rand_scores.argsort(dim=1)[:, :num_to_keep]  # [N, num_experts]
+
+    # Gather new topk_idx and topk_weight
+    topk_idx_new = torch.gather(topk_idx, dim=1, index=keep_indices)
+    topk_weight_new = torch.gather(topk_weight, dim=1, index=keep_indices)
+
+    return topk_idx_new, topk_weight_new
+
+
 class DeepseekV2YarnRotaryEmbedding(DeepseekV2RotaryEmbedding):
 
     def __init__(
@@ -535,7 +472,7 @@ class MoEGate(nn.Module):
         self.topk_method = config.topk_method
         self.n_group = config.n_group
         self.topk_group = config.topk_group
-
+        self.candidates = config.candidates #self.topK+self.candidates, then randomly failed
         # topk selection algorithm
         self.norm_topk_prob = config.norm_topk_prob
         self.gating_dim = config.hidden_size
@@ -566,8 +503,8 @@ class MoEGate(nn.Module):
         ### select top-k experts
         if self.topk_method == "greedy":
             topk_weight, topk_idx = torch.topk(
-                scores, k=self.top_k+1, dim=-1, sorted=False
-            )
+                scores, k=self.top_k+self.candidates, dim=-1, sorted=False
+            ) #top k to be 8, randomly training the 6 experts to 
         elif self.topk_method == "group_limited_greedy":
             group_scores = (
                 scores.view(bsz * seq_len, self.n_group, -1).max(dim=-1).values
@@ -600,7 +537,7 @@ class MoEGate(nn.Module):
         ### expert-level computation auxiliary loss
         if self.training and self.alpha > 0.0:
             scores_for_aux = scores
-            aux_topk = self.top_k
+            aux_topk = self.top_k + self.candidates
             # always compute aux loss based on the naive greedy topk method
             topk_idx_for_aux_loss = topk_idx.view(bsz, -1)
             if self.seq_aux:
@@ -626,9 +563,9 @@ class MoEGate(nn.Module):
                 aux_loss = (Pi * fi).sum() * self.alpha
         else:
             aux_loss = None
-
-        topk_idx,topk_weight = failed_any_expert_with_random(topk_idx, topk_weight)
-          
+        
+        if self.candidates > 0:
+            topk_idx, topk_weight = failed_any_expert_vectorized_fast(topk_idx, topk_weight, num_experts=self.top_k)
         return topk_idx, topk_weight, aux_loss
 
 
