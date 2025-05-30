@@ -54,7 +54,7 @@ def main():
         do_eval=do_eval,
         eval_strategy="steps",
         eval_steps=200,
-        gradient_accumulation_steps=4,
+        gradient_accumulation_steps=2,
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         # greater_is_better=False,
